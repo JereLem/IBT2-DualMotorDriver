@@ -1,137 +1,109 @@
 #include "DualIBT2MotorShield.h"
 
+// Default Constructor
 DualIBT2MotorShield::DualIBT2MotorShield()
+  : _RPWM1(9), _LPWM1(10), _RPWM2(5), _LPWM2(6)
 {
-  // Pin map for IBT-2 motor driver
-  _RPWM1 = 9;
-  _LPWM1 = 10;
-  _REN1 = 8;
-  _LEN1 = 7;
-  _RPWM2 = 5;
-  _LPWM2 = 6;
-  _REN2 = 4;
-  _LEN2 = 3;
 }
 
-void DualIBT2MotorShield::init()
+// User-defined pin selection
+DualIBT2MotorShield::DualIBT2MotorShield(unsigned char RPWM1, unsigned char LPWM1,
+                                         unsigned char RPWM2, unsigned char LPWM2)
+  : _RPWM1(RPWM1), _LPWM1(LPWM1), _RPWM2(RPWM2), _LPWM2(LPWM2)
 {
-  // Define pinMode for the pins and set the frequency for timer1 and timer0.
+}
+
+void DualIBT2MotorShield::initTimer1For20kHz() {
+  // Set Timer 1 to 20 kHz
+  TCCR1A = 0;           // Clear TCCR1A register
+  TCCR1B = 0;           // Clear TCCR1B register
+  TCNT1  = 0;           // Clear counter value
+  TCCR1B |= (1 << WGM13) | (1 << WGM12);
+  TCCR1A |= (1 << WGM11) | (1 << WGM10);
+
+  // Set non-inverting mode
+  TCCR1A |= (1 << COM1A1) | (1 << COM1B1);
+
+  // Set prescaler to 1 and start the timer
+  TCCR1B |= (1 << CS10);
+
+  // Set ICR1 register to define the top value (20 kHz)
+  ICR1 = 799;  // 20 kHz
+}
+
+void DualIBT2MotorShield::initTimer2For20kHz() {
+  // Set Timer 2 to ~20 kHz
+  TCCR2A = 0;           // Clear TCCR2A register
+  TCCR2B = 0;           // Clear TCCR2B register
+  TCNT2  = 0;           // Clear counter value
+  TCCR2B |= (1 << WGM22);
+  TCCR2A |= (1 << WGM21) | (1 << WGM20);
+
+  // Set non-inverting mode
+  TCCR2A |= (1 << COM2A1) | (1 << COM2B1);
+
+  // Set prescaler to 1 and start the timer
+  TCCR2B |= (1 << CS20);
+
+  // Set OCR2A register to define the top value (for ~20 kHz, use OCR2A value)
+  OCR2A = 199;  // Close to 20 kHz
+}
+
+// Initialize the motor driver
+void DualIBT2MotorShield::init() {
+  // Initialize Motor 1 pins
   pinMode(_RPWM1, OUTPUT);
   pinMode(_LPWM1, OUTPUT);
-  pinMode(_REN1, OUTPUT);
-  pinMode(_LEN1, OUTPUT);
+
+  // Initialize Motor 2 pins
   pinMode(_RPWM2, OUTPUT);
   pinMode(_LPWM2, OUTPUT);
-  pinMode(_REN2, OUTPUT);
-  pinMode(_LEN2, OUTPUT);
-  
-  digitalWrite(_REN1, HIGH);
-  digitalWrite(_LEN1, HIGH);
-  digitalWrite(_REN2, HIGH);
-  digitalWrite(_LEN2, HIGH);
 
-  // Timer1 configuration for 20kHz PWM on pins 9 and 10
-  TCCR1A = (1 << WGM11) | (1 << WGM10) | (1 << COM1A1) | (1 << COM1B1);
-  TCCR1B = (1 << WGM13) | (1 << WGM12) | (1 << CS10);
-  ICR1 = 400;
 
-  // Timer0 configuration for 20kHz PWM on pins 5 and 6
-  TCCR0A = (1 << WGM01) | (1 << WGM00) | (1 << COM0A1) | (1 << COM0B1);
-  TCCR0B = (1 << CS00);
-  OCR0A = 199;
+  // Set initial motor state to stopped
+  digitalWrite(_RPWM1, LOW);
+  digitalWrite(_LPWM1, LOW);
+
+  digitalWrite(_RPWM2, LOW);
+  digitalWrite(_LPWM2, LOW);
+
+
+  // Initialize timers for 20 kHz PWM
+  initTimer1For20kHz();
+  initTimer2For20kHz();
 }
 
-void DualIBT2MotorShield::setM1Speed(int speed)
-{
-  unsigned char reverse = 0;
-  if (speed < 0)
-  {
-    speed = -speed;
-    reverse = 1;
-  }
-  if (speed > 400)
-    speed = 400;
-
-  // Handle the case where the PWM pins are on Timer1
-  if (_RPWM1 == 9 || _LPWM1 == 10)
-  {
-    OCR1A = speed;
-    OCR1B = 0;
-  }
-  else
-  {
+// Set speed for Motor 1
+void DualIBT2MotorShield::setM1Speed(int speed) {
+  if (speed > 0) {
     analogWrite(_RPWM1, speed);
     analogWrite(_LPWM1, 0);
-  }
-
-  if (reverse)
-  {
-    digitalWrite(_RPWM1, LOW);
-    digitalWrite(_LPWM1, HIGH);
-  }
-  else
-  {
-    digitalWrite(_RPWM1, HIGH);
-    digitalWrite(_LPWM1, LOW);
+  } else if (speed < 0) {
+    analogWrite(_RPWM1, 0);
+    analogWrite(_LPWM1, -speed);
+  } else {
+    analogWrite(_RPWM1, 0);
+    analogWrite(_LPWM1, 0);
   }
 }
 
-void DualIBT2MotorShield::setM2Speed(int speed)
-{
-  unsigned char reverse = 0;
-  if (speed < 0)
-  {
-    speed = -speed;
-    reverse = 1;
-  }
-  if (speed > 400)
-    speed = 400;
-
-  // Handle the case where the PWM pins are on Timer0
-  if (_RPWM2 == 5 || _LPWM2 == 6)
-  {
-    OCR0A = speed;
-    OCR0B = 0;
-  }
-  else
-  {
+// Set speed for Motor 2
+void DualIBT2MotorShield::setM2Speed(int speed) {
+  if (speed > 0) {
     analogWrite(_RPWM2, speed);
     analogWrite(_LPWM2, 0);
-  }
-
-  if (reverse)
-  {
-    digitalWrite(_RPWM2, LOW);
-    digitalWrite(_LPWM2, HIGH);
-  }
-  else
-  {
-    digitalWrite(_RPWM2, HIGH);
-    digitalWrite(_LPWM2, LOW);
+  } else if (speed < 0) {
+    analogWrite(_RPWM2, 0);
+    analogWrite(_LPWM2, -speed);
+  } else {
+    analogWrite(_RPWM2, 0);
+    analogWrite(_LPWM2, 0);
   }
 }
 
-void DualIBT2MotorShield::setSpeeds(int m1Speed, int m2Speed)
-{
+
+// Set speed for both motors
+void DualIBT2MotorShield::setSpeeds(int m1Speed, int m2Speed) {
   setM1Speed(m1Speed);
   setM2Speed(m2Speed);
 }
-
-void DualIBT2MotorShield::setM1Brake(int brake)
-{
-  analogWrite(_RPWM1, 0);
-  analogWrite(_LPWM1, 0);
-}
-
-void DualIBT2MotorShield::setM2Brake(int brake)
-{
-  analogWrite(_RPWM2, 0);
-  analogWrite(_LPWM2, 0);
-}
-
-void DualIBT2MotorShield::setBrakes(int m1Brake, int m2Brake)
-{
-  setM1Brake(m1Brake);
-  setM2Brake(m2Brake);
-}
-
